@@ -29,6 +29,7 @@ function sendCacLog(message) {
 // THE FIX: Conditional MediaPlaybackInfoHandler
 // ----------------------------------------------------------------------
 playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
+  sendCacLog('setMediaPlaybackInfoHandler start, loadRequestData' + loadRequestData );
   const currentContentId = loadRequestData.media.contentId;
   sendCacLog('setMediaPlaybackInfoHandler called for: ' + currentContentId);
 
