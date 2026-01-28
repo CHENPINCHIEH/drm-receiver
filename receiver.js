@@ -1,61 +1,115 @@
-const context = cast.framework.CastReceiverContext.getInstance();
+// --- Logging for CaC Tool (with Queuing) ---
+const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
+window.queuedCacLogs = window.queuedCacLogs || [];
+let contextInstance = null; // Hold context globally
 
 function sendCacLog(message) {
-  try {
-    const logPayload = {
-      timestamp: new Date().toLocaleTimeString(),
-      level: 'LOG',
-      message: message,
-    };
-    const senders = context.getSenders();
+  const logPayload = {
+    timestamp: new Date().toLocaleTimeString(),
+    level: 'LOG',
+    message: message,
+  };
+  if (contextInstance) {
+    const senders = contextInstance.getSenders();
     if (senders && senders.length > 0) {
       senders.forEach(sender => {
-        context.sendCustomMessage('urn:x-cast:com.google.cast.cac', sender.id, logPayload);
+        try {
+          contextInstance.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload);
+        } catch (e) {
+          console.error('sendCustomMessage failed:', e);
+        }
       });
-    } else {
-      // Queue message if no senders yet
-      if (!window.queuedCacLogs) window.queuedCacLogs = [];
-      window.queuedCacLogs.push(logPayload);
+      return;
     }
-  } catch (e) { console.error("sendCacLog failed:", e); }
+  }
+  // If no context or no senders, queue it
+  window.queuedCacLogs.push(logPayload);
+  console.log('Queued CAC Log:', message);
 }
 
 function flushQueuedLogs() {
-    if (window.queuedCacLogs && window.queuedCacLogs.length > 0) {
-        const senders = context.getSenders();
-        if (senders && senders.length > 0) {
-            sendCacLog('Receiver: Flushing ' + window.queuedCacLogs.length + ' queued logs.');
-            window.queuedCacLogs.forEach(logPayload => {
-                senders.forEach(sender => {
-                    context.sendCustomMessage('urn:x-cast:com.google.cast.cac', sender.id, logPayload);
-                });
-            });
-            window.queuedCacLogs = [];
-        }
+  if (contextInstance && window.queuedCacLogs && window.queuedCacLogs.length > 0) {
+    const senders = contextInstance.getSenders();
+    if (senders && senders.length > 0) {
+      const numQueued = window.queuedCacLogs.length;
+      // Send a message that we are about to flush
+      const flushMsg = {
+          timestamp: new Date().toLocaleTimeString(),
+          level: 'LOG',
+          message: 'Receiver: Flushing ' + numQueued + ' queued logs.',
+      };
+      senders.forEach(sender => {
+          try {
+              contextInstance.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, flushMsg);
+          } catch (e) { /* Ignore */ }
+      });
+
+      while (window.queuedCacLogs.length > 0) {
+        const logPayload = window.queuedCacLogs.shift();
+        senders.forEach(sender => {
+          try {
+            contextInstance.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload);
+          } catch (e) {
+            console.error('sendCustomMessage failed during flush:', e);
+          }
+        });
+      }
     }
+  }
 }
 
-sendCacLog('Receiver: MINIMAL - Script Loaded.');
-console.log('Receiver: MINIMAL - Script Loaded.');
+sendCacLog('Receiver: Script Top Level Execution START.');
+console.log('Receiver: Script Top Level Execution START.');
 
 try {
-  context.onReady = (event) => {
-    sendCacLog('Receiver: MINIMAL - Context Ready.');
-    console.log('Receiver: MINIMAL - Context Ready.', event);
+  sendCacLog('Receiver: Getting CastReceiverContext instance...');
+  contextInstance = cast.framework.CastReceiverContext.getInstance();
+  if (!contextInstance) {
+    sendCacLog('Receiver: ERROR - Failed to get Context Instance');
+    throw new Error('Failed to get CastReceiverContext instance');
+  }
+  sendCacLog('Receiver: Got Context Instance.');
+
+  sendCacLog('Receiver: Getting PlayerManager instance...');
+  const playerManager = contextInstance.getPlayerManager();
+  if (!playerManager) {
+    sendCacLog('Receiver: ERROR - Failed to get PlayerManager Instance');
+    throw new Error('Failed to get PlayerManager instance');
+  }
+  sendCacLog('Receiver: Got PlayerManager Instance.');
+
+  contextInstance.onReady = (event) => {
+    sendCacLog('Receiver: Event - Context Ready.');
+    console.log('Receiver: Event - Context Ready.', event);
     flushQueuedLogs();
   };
+  sendCacLog('Receiver: onReady handler set.');
 
-  context.onSenderConnected = (event) => {
-    sendCacLog('Receiver: MINIMAL - Sender Connected: ' + event.senderId);
-    console.log('Receiver: MINIMAL - Sender Connected:', event);
+  contextInstance.onSenderConnected = (event) => {
+    sendCacLog('Receiver: Event - Sender Connected: ' + (event ? event.senderId : 'N/A'));
+    console.log('Receiver: Event - Sender Connected:', event);
     flushQueuedLogs();
   };
+  sendCacLog('Receiver: onSenderConnected handler set.');
 
-  context.start({ disableIdleTimeout: true });
-  sendCacLog('Receiver: MINIMAL - Context Start Called.');
-  console.log('Receiver: MINIMAL - Context Start Called.');
+  contextInstance.onSenderDisconnected = (event) => {
+    sendCacLog('Receiver: Event - Sender Disconnected: ' + (event ? event.senderId : 'N/A'));
+    console.log('Receiver: Event - Sender Disconnected:', event);
+  };
+  sendCacLog('Receiver: onSenderDisconnected handler set.');
+
+  // --- Start Receiver ---
+  sendCacLog('Receiver: Calling context.start()...');
+  const options = new cast.framework.CastReceiverOptions();
+  options.disableIdleTimeout = true;
+  contextInstance.start(options);
+  sendCacLog('Receiver: Context Start() Called.');
 
 } catch (err) {
-  sendCacLog('Receiver: MINIMAL - ERROR: ' + err.message);
-  console.error('Receiver: MINIMAL - ERROR:', err);
+  const errorMsg = 'Receiver: FATAL ERROR during setup: ' + err.message + ' | Stack: ' + (err.stack || 'No stack');
+  sendCacLog(errorMsg);
+  console.error(errorMsg, err);
 }
+
+sendCacLog('Receiver: Script Top Level Execution END.');
+console.log('Receiver: Script Top Level Execution END.');
