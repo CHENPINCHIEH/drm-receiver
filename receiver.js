@@ -3,23 +3,23 @@ const playerManager = context.getPlayerManager();
 const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
 window.queuedCacLogs = window.queuedCacLogs || [];
 
-// --- Logging for CaC Tool ---
+// --- CaC Tool Log 工具 (含隊列功能) ---
 function sendCacLog(message) {
   const logPayload = {
     timestamp: new Date().toLocaleTimeString(),
     level: 'LOG',
-    message: message,
+    message: "[Receiver] " + message,
   };
   const senders = context.getSenders();
   if (senders && senders.length > 0) {
     while (window.queuedCacLogs.length > 0) {
       const queuedPayload = window.queuedCacLogs.shift();
       senders.forEach(sender => {
-        try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { }
+        try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { console.error('sendCacLog flush error:', e); }
       });
     }
     senders.forEach(sender => {
-      try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { }
+      try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { console.error('sendCacLog current error:', e); }
     });
   } else {
     window.queuedCacLogs.push(logPayload);
@@ -27,50 +27,70 @@ function sendCacLog(message) {
   }
 }
 
-sendCacLog('Receiver: CLEAR MP4 Test Loaded.');
+sendCacLog('Script Loaded');
 
 try {
   context.onSenderConnected = (event) => {
-    sendCacLog('Receiver: Event - Sender Connected.');
+    sendCacLog('Event - Sender Connected: ' + (event ? event.senderId : 'N/A'));
   };
+  sendCacLog('onSenderConnected handler set.');
 
-  // --- INTERCEPT ALL LOAD REQUESTS TO FORCE A CLEAR MP4 ---
+  // --- 攔截所有 LOAD 請求 ---
+  // 不論 CaC Tool 傳送什麼，都強制播放固定的 DRM 影片
   playerManager.setMessageInterceptor(
     cast.framework.messages.MessageType.LOAD,
     (request) => {
-      sendCacLog('Receiver: LOAD Interceptor - Forcing Clear MP4');
+      sendCacLog('LOAD Interceptor START');
       request.media = {
-        contentId: 'https://storage.googleapis.com/testtopbox-public/video_content/bbb/BigBuckBunny.mp4', // Public Clear MP4
-        contentType: 'video/mp4',
+        contentId: 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd',
+        contentType: 'application/dash+xml',
         streamType: 'BUFFERED',
-        title: 'Big Buck Bunny'
+        title: 'Hardcoded DRM Test'
       };
+      sendCacLog('LOAD Interceptor - Media forced to Angel One DRM');
       return request;
     }
   );
-  sendCacLog('Receiver: LOAD Interceptor Set.');
+  sendCacLog('LOAD Message Interceptor Set.');
 
-  // NO setMediaPlaybackInfoHandler needed for clear content
+  // --- 固定的 DRM 資訊處理 ---
+  playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
+    sendCacLog('setMediaPlaybackInfoHandler START');
+    const contentId = loadRequestData.media && loadRequestData.media.contentId;
+    sendCacLog('Handler - Content ID: ' + contentId);
 
-  // --- Basic Player Event Listeners ---
+    sendCacLog('Handler - APPLYING Hardcoded Widevine DRM settings.');
+    playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
+    playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
+    playbackConfig.shakaPlayerConfig = {
+      drm: {
+        servers: { 'com.widevine.alpha': playbackConfig.licenseUrl }
+      }
+    };
+    sendCacLog('setMediaPlaybackInfoHandler END');
+    return playbackConfig;
+  });
+  sendCacLog('MediaPlaybackInfoHandler Set.');
+
+  // --- 基本的播放器事件監聽 ---
   playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
-    sendCacLog('Receiver: Player Event - ERROR: ' + JSON.stringify(event));
+    sendCacLog('Player Event - ERROR: ' + JSON.stringify(event));
   });
   playerManager.addEventListener(cast.framework.events.EventType.PLAYING, (event) => {
-    sendCacLog('Receiver: Player Event - PLAYING');
+    sendCacLog('Player Event - PLAYING');
   });
   playerManager.addEventListener(cast.framework.events.EventType.LOAD_START, (event) => {
-    sendCacLog('Receiver: Player Event - LOAD_START');
+    sendCacLog('Player Event - LOAD_START');
   });
-  sendCacLog('Receiver: Basic event listeners added.');
+  sendCacLog('Basic event listeners added.');
 
-  // --- Start Receiver ---
-  sendCacLog('Receiver: Calling context.start()...');
+  // --- 啟動 Receiver ---
+  sendCacLog('Calling context.start()...');
   context.start({ disableIdleTimeout: true });
-  sendCacLog('Receiver: Context Started.');
+  sendCacLog('Context Started.');
 
 } catch (err) {
-  const errorMsg = 'Receiver: FATAL ERROR during setup: ' + err.message;
+  const errorMsg = 'FATAL ERROR during setup: ' + err.message;
   sendCacLog(errorMsg);
   console.error(errorMsg, err);
 }
