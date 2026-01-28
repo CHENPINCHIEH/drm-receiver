@@ -1,9 +1,11 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
+// Define the URL of your main DRM content
+const MAIN_DRM_CONTENT_ID = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+
 /**
  * Sends a log message to any connected CaC Tool instances.
- * @param {string} message - The message to log.
  */
 function sendCacLog(message) {
   try {
@@ -19,41 +21,51 @@ function sendCacLog(message) {
       });
     }
   } catch (e) {
-    // Fail silently if CaC logging has an issue.
+    // Ignore logging errors
   }
 }
 
-// MediaPlaybackInfoHandler: INTENTIONALLY BUGGY
-// Applies Widevine DRM settings to ALL content requests, including clear ads.
+// ----------------------------------------------------------------------
+// THE FIX: Conditional MediaPlaybackInfoHandler
+// ----------------------------------------------------------------------
 playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
-  const contentId = loadRequestData.media && loadRequestData.media.contentId ? loadRequestData.media.contentId : 'UNKNOWN';
-  sendCacLog('setMediaPlaybackInfoHandler for: ' + contentId);
+  const currentContentId = loadRequestData.media.contentId;
+  sendCacLog('setMediaPlaybackInfoHandler called for: ' + currentContentId);
 
-  // BUG: Apply Widevine to everything.
-  playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
-  playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
-  // No custom licenseRequestHandler needed for this license server.
+  // CHECK: Is this the main DRM content?
+  if (currentContentId === MAIN_DRM_CONTENT_ID) {
+    sendCacLog('>> MATCH: Applying Widevine DRM config for Main Content.');
+    
+    playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
+    playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
+  } else {
+    // If it is NOT the main content (e.g., it is an Ad), do NOT apply DRM.
+    sendCacLog('>> NO MATCH: Skipping DRM config (Likely an Ad).');
+  }
 
-  sendCacLog('Applied Widevine DRM config to: ' + contentId);
   return playbackConfig;
 });
 
-// Intercept LOAD to force the test scenario.
+// ----------------------------------------------------------------------
+// Setup the Test Scenario (Ads + Stitched Timeline + DRM)
+// ----------------------------------------------------------------------
 playerManager.setMessageInterceptor(
   cast.framework.messages.MessageType.LOAD,
   (request) => {
-    sendCacLog('LOAD interceptor: Injecting DRM content with VMAP ads and stitching.');
+    sendCacLog('LOAD interceptor: Setting up VMAP + Stitched Timeline + DRM scenario.');
 
     const media = new cast.framework.messages.MediaInformation();
-    media.contentId = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+    
+    // 1. Set the Main Content ID (Must match the check in the handler above)
+    media.contentId = MAIN_DRM_CONTENT_ID;
     media.streamType = cast.framework.messages.StreamType.BUFFERED;
     media.contentType = 'application/dash+xml';
 
-    // VMAP Pre-roll Ad Request
+    // 2. Inject VMAP Ad Request
     media.vmapAdsRequest = new cast.framework.messages.VmapAdsRequest();
     media.vmapAdsRequest.adTagUrl = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/ad_rule_samples&ciu_szs=300x250&ad_rule=1&impl=s&gdfp_req=1&env=vp&output=vmap&unviewed_position_start=1&cust_params=deployment%3Ddevsite%26sample_ar%3Dpreonly&cmsid=496&vid=short_onecue&correlator=';
 
-    // Enable Stitched Timeline - key part of the problem scenario
+    // 3. Enable Stitched Timeline
     media.stitchedContentTimeline = true;
 
     request.media = media;
@@ -62,6 +74,5 @@ playerManager.setMessageInterceptor(
 );
 
 // Start the receiver
-context.start({ disableIdleTimeout: true }); // Disable idle timeout for testing
-sendCacLog('Cast Receiver Context Started');
-
+context.start({ disableIdleTimeout: true });
+sendCacLog('Receiver Started with FIXED Logic.');
