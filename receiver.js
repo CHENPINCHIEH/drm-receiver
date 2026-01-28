@@ -1,3 +1,5 @@
+
+// ****** smple test for checking vedio play ****** //
 // const context = cast.framework.CastReceiverContext.getInstance();
 // const playerManager = context.getPlayerManager();
 // const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
@@ -96,7 +98,7 @@
 // }
 
 
-
+// ****** fix version **** //
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
