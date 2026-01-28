@@ -1,7 +1,5 @@
 const context = cast.framework.CastReceiverContext.getInstance();
-const playerManager = context.getPlayerManager();
 
-// --- Logging for CaC Tool ---
 function sendCacLog(message) {
   try {
     const logPayload = {
@@ -14,71 +12,50 @@ function sendCacLog(message) {
       senders.forEach(sender => {
         context.sendCustomMessage('urn:x-cast:com.google.cast.cac', sender.id, logPayload);
       });
+    } else {
+      // Queue message if no senders yet
+      if (!window.queuedCacLogs) window.queuedCacLogs = [];
+      window.queuedCacLogs.push(logPayload);
     }
-  } catch (e) {
-    console.error("sendCacLog failed:", e);
-  }
+  } catch (e) { console.error("sendCacLog failed:", e); }
 }
 
-sendCacLog('Receiver: Script Loaded (Simple DRM Test).');
+function flushQueuedLogs() {
+    if (window.queuedCacLogs && window.queuedCacLogs.length > 0) {
+        const senders = context.getSenders();
+        if (senders && senders.length > 0) {
+            sendCacLog('Receiver: Flushing ' + window.queuedCacLogs.length + ' queued logs.');
+            window.queuedCacLogs.forEach(logPayload => {
+                senders.forEach(sender => {
+                    context.sendCustomMessage('urn:x-cast:com.google.cast.cac', sender.id, logPayload);
+                });
+            });
+            window.queuedCacLogs = [];
+        }
+    }
+}
+
+sendCacLog('Receiver: MINIMAL - Script Loaded.');
+console.log('Receiver: MINIMAL - Script Loaded.');
 
 try {
-  sendCacLog('Receiver: Setting up MediaPlaybackInfoHandler...');
+  context.onReady = (event) => {
+    sendCacLog('Receiver: MINIMAL - Context Ready.');
+    console.log('Receiver: MINIMAL - Context Ready.', event);
+    flushQueuedLogs();
+  };
 
-  // --- Simplified MediaPlaybackInfoHandler for DRM ---
-  playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
-    sendCacLog('Receiver: setMediaPlaybackInfoHandler START');
-    try {
-      const media = loadRequestData ? loadRequestData.media : null;
-      if (!media) {
-        sendCacLog('Receiver: Handler WARN - No media object.');
-        return playbackConfig;
-      }
-      const contentId = media.contentId || 'UNKNOWN';
-      sendCacLog('Receiver: Handler - Content ID: ' + contentId);
+  context.onSenderConnected = (event) => {
+    sendCacLog('Receiver: MINIMAL - Sender Connected: ' + event.senderId);
+    console.log('Receiver: MINIMAL - Sender Connected:', event);
+    flushQueuedLogs();
+  };
 
-      // ALWAYS apply DRM for this simple test
-      sendCacLog('Receiver: Handler - APPLYING Widevine DRM.');
-      playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
-      // License URL from customData or fallback to default test server
-      playbackConfig.licenseUrl = (media.customData && media.customData.licenseUrl) || 'https://cwip-shaka-proxy.appspot.com/no_auth';
-      sendCacLog('Receiver: Handler - License URL: ' + playbackConfig.licenseUrl);
-
-      // Basic Shaka config for the license server
-      playbackConfig.shakaPlayerConfig = playbackConfig.shakaPlayerConfig || {};
-      playbackConfig.shakaPlayerConfig.drm = playbackConfig.shakaPlayerConfig.drm || {};
-      playbackConfig.shakaPlayerConfig.drm.servers = {
-        'com.widevine.alpha': playbackConfig.licenseUrl
-      };
-
-    } catch (e) {
-      sendCacLog('Receiver: Handler ERROR: ' + e.message);
-      console.error('Handler ERROR:', e);
-    }
-    sendCacLog('Receiver: setMediaPlaybackInfoHandler END');
-    return playbackConfig;
-  });
-  sendCacLog('Receiver: MediaPlaybackInfoHandler Set.');
-
-  // NO MESSAGE INTERCEPTOR - We expect the sender to provide the full MediaInformation
-
-  // --- Player Event Listeners for Debugging ---
-  const eventTypes = cast.framework.events.EventType;
-  const eventsToLog = [eventTypes.ERROR, eventTypes.PLAYING, eventTypes.PAUSE, eventTypes.ENDED, eventTypes.DRM_ERROR];
-  eventsToLog.forEach(eventType => {
-     playerManager.addEventListener(eventType, (event) => {
-      sendCacLog('Receiver: Player Event - ' + eventType + ' | ' + JSON.stringify(event));
-    });
-  });
-  sendCacLog('Receiver: Key player event listeners added.');
-
-  // --- Start Receiver ---
-  sendCacLog('Receiver: Calling context.start()...');
   context.start({ disableIdleTimeout: true });
-  sendCacLog('Receiver: Context Started.');
+  sendCacLog('Receiver: MINIMAL - Context Start Called.');
+  console.log('Receiver: MINIMAL - Context Start Called.');
 
 } catch (err) {
-  const errorMsg = 'Receiver: FATAL ERROR during setup: ' + err.message;
-  sendCacLog(errorMsg);
-  console.error(errorMsg, err);
+  sendCacLog('Receiver: MINIMAL - ERROR: ' + err.message);
+  console.error('Receiver: MINIMAL - ERROR:', err);
 }
