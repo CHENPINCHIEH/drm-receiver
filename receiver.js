@@ -25,16 +25,19 @@ try {
     const contentId = media && media.contentId ? media.contentId : 'UNKNOWN';
     sendCacLog('setMediaPlaybackInfoHandler for: ' + contentId);
 
-    if (!media) {
-      sendCacLog('MediaPlaybackInfoHandler: No media object in request.');
-      return playbackConfig; // Or return an error
-    }
+  // THE FIX: Only apply DRM if the contentId matches your Main DRM Content
+  const MAIN_CONTENT_ID = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
 
-    // BUGGY PART: Apply Widevine to everything.
+  if (contentId === MAIN_CONTENT_ID) {
+    sendCacLog('>> MATCH: Applying Widevine DRM for Main Content.');
     playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
     playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
-    sendCacLog('Applied Widevine DRM config to: ' + contentId);
-    return playbackConfig;
+  } else {
+    // Do NOT apply DRM for VMAP Ads (which have different contentIds)
+    sendCacLog('>> NO MATCH: Skipping DRM for Clear Content/Ad.');
+  }
+
+  return playbackConfig;
   });
   sendCacLog('MediaPlaybackInfoHandler set.');
 
