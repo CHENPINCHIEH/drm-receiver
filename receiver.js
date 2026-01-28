@@ -1,6 +1,12 @@
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 
+// --- Configuration ---
+// URL of the main DRM-protected content. MUST match the one in the interceptor.
+const MAIN_DRM_CONTENT_ID = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+const WIDEVINE_LICENSE_SERVER = 'https://cwip-shaka-proxy.appspot.com/no_auth';
+
+// --- Logging for CaC Tool ---
 function sendCacLog(message) {
   try {
     const logPayload = {
@@ -17,64 +23,68 @@ function sendCacLog(message) {
   } catch (e) { /* Ignore */ }
 }
 
-sendCacLog('Receiver script parsing.');
+sendCacLog('Receiver: Script Loaded.');
 
 try {
+  // --- FIXED MediaPlaybackInfoHandler ---
   playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
     const media = loadRequestData ? loadRequestData.media : null;
     const contentId = media && media.contentId ? media.contentId : 'UNKNOWN';
-    sendCacLog('setMediaPlaybackInfoHandler for: ' + contentId);
+    sendCacLog('Receiver: setMediaPlaybackInfoHandler for: ' + contentId);
 
-  // THE FIX: Only apply DRM if the contentId matches your Main DRM Content
-  const MAIN_CONTENT_ID = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+    if (!media) {
+      sendCacLog('Receiver: Handler Warning - No media object.');
+      return playbackConfig;
+    }
 
-  if (contentId === MAIN_CONTENT_ID) {
-    sendCacLog('>> MATCH: Applying Widevine DRM for Main Content.');
-    playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
-    playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
-  } else {
-    // Do NOT apply DRM for VMAP Ads (which have different contentIds)
-    sendCacLog('>> NO MATCH: Skipping DRM for Clear Content/Ad.');
-  }
-
-  return playbackConfig;
+    // THE FIX: Only apply DRM if the contentId is the main DRM content.
+    if (contentId === MAIN_DRM_CONTENT_ID) {
+      sendCacLog('Receiver: Handler - Applying Widevine for MAIN Content.');
+      playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
+      playbackConfig.licenseUrl = WIDEVINE_LICENSE_SERVER;
+    } else {
+      // Otherwise, assume it's an ad or other clear content.
+      sendCacLog('Receiver: Handler - Skipping DRM for: ' + contentId + ' (Assuming Ad)');
+      // Explicitly ensure no DRM is configured for this segment.
+      playbackConfig.protectionSystem = undefined;
+      playbackConfig.licenseUrl = undefined;
+    }
+    return playbackConfig;
   });
-  sendCacLog('MediaPlaybackInfoHandler set.');
+  sendCacLog('Receiver: MediaPlaybackInfoHandler Set (FIXED).');
 
+  // --- Interceptor to force the test case ---
   playerManager.setMessageInterceptor(
     cast.framework.messages.MessageType.LOAD,
     (request) => {
-      sendCacLog('LOAD interceptor entry. Request: ' + JSON.stringify(request));
+      sendCacLog('Receiver: LOAD Interceptor - Modifying request for test setup.');
+      const media = request.media || new cast.framework.messages.MediaInformation();
 
-      // Ensure request.media exists, though we are about to overwrite it.
-      if (!request.media) {
-          request.media = new cast.framework.messages.MediaInformation();
-      }
-
-      sendCacLog('LOAD interceptor: Injecting DRM content with VMAP ads and stitching.');
-      const media = request.media;
-      media.contentId = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
+      media.contentId = MAIN_DRM_CONTENT_ID;
       media.streamType = cast.framework.messages.StreamType.BUFFERED;
       media.contentType = 'application/dash+xml';
+
+      // VMAP Ad Request
       media.vmapAdsRequest = new cast.framework.messages.VmapAdsRequest();
       media.vmapAdsRequest.adTagUrl = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/ad_rule_samples&ciu_szs=300x250&ad_rule=1&impl=s&gdfp_req=1&env=vp&output=vmap&unviewed_position_start=1&cust_params=deployment%3Ddevsite%26sample_ar%3Dpreonly&cmsid=496&vid=short_onecue&correlator=';
-      media.stitchedContentTimeline = true;
-      // Clear customData to avoid confusion in this buggy version
-      media.customData = {};
 
-      sendCacLog('LOAD interceptor: Modified request: ' + JSON.stringify(request));
+      // Enable Stitched Timeline
+      media.stitchedContentTimeline = true;
+      media.customData = {};
+      request.media = media;
+
+      sendCacLog('Receiver: LOAD Interceptor - Modified request: ' + JSON.stringify(request.media, null, 2));
       return request;
     }
   );
-  sendCacLog('LOAD message interceptor set.');
+  sendCacLog('Receiver: LOAD Message Interceptor Set.');
 
-  const options = new cast.framework.CastReceiverOptions();
-  options.disableIdleTimeout = true;
-  context.start(options);
-  sendCacLog('Cast Receiver Context Started.');
+  // --- Start Receiver ---
+  context.start({ disableIdleTimeout: true });
+  sendCacLog('Receiver: Context Started.');
 
 } catch (err) {
-  sendCacLog('ERROR during receiver setup: ' + err.message + ' | ' + err.stack);
-  // Also log to console for chrome://inspect
-  console.error('ERROR during receiver setup:', err);
+  const errorMsg = 'Receiver: ERROR during setup: ' + err.message;
+  sendCacLog(errorMsg);
+  console.error(errorMsg, err);
 }
