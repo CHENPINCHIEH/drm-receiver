@@ -3,73 +3,74 @@ const playerManager = context.getPlayerManager();
 const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
 window.queuedCacLogs = window.queuedCacLogs || [];
 
+// --- Logging for CaC Tool ---
 function sendCacLog(message) {
-  // ... (sendCacLog 函數與之前相同)
-  try {
-    const logPayload = {
-      timestamp: new Date().toLocaleTimeString(),
-      level: 'LOG',
-      message: message,
-    };
-    const senders = context.getSenders();
-    if (senders && senders.length > 0) {
-      while (window.queuedCacLogs.length > 0) {
-        const queuedPayload = window.queuedCacLogs.shift();
-        senders.forEach(sender => {
-          try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { console.error('sendCacLog flush error:', e); }
-        });
-      }
+  const logPayload = {
+    timestamp: new Date().toLocaleTimeString(),
+    level: 'LOG',
+    message: message,
+  };
+  const senders = context.getSenders();
+  if (senders && senders.length > 0) {
+    while (window.queuedCacLogs.length > 0) {
+      const queuedPayload = window.queuedCacLogs.shift();
       senders.forEach(sender => {
-        try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { console.error('sendCacLog current error:', e); }
+        try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { }
       });
-    } else {
-      window.queuedCacLogs.push(logPayload);
-      console.log('Queued CAC Log:', message);
     }
-  } catch (e) { console.error("sendCacLog failed:", e); }
+    senders.forEach(sender => {
+      try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { }
+    });
+  } else {
+    window.queuedCacLogs.push(logPayload);
+    console.log('Queued CAC Log:', message);
+  }
 }
 
-sendCacLog('Receiver: Script Loaded (Simple DRM Test).');
+sendCacLog('Receiver: CLEAR MP4 Test Loaded.');
 
 try {
   context.onSenderConnected = (event) => {
     sendCacLog('Receiver: Event - Sender Connected.');
   };
 
-  playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
-    sendCacLog('Receiver: setMediaPlaybackInfoHandler START');
-    const media = loadRequestData.media;
-    if (media && media.contentId) {
-        sendCacLog('Receiver: Handler - Content ID: ' + media.contentId);
-        if (media.customData && media.customData.drm) {
-          const drmConfig = media.customData.drm;
-          if (drmConfig.protectionSystem === 'widevine' && drmConfig.licenseUrl) {
-            sendCacLog('Receiver: Handler - APPLYING Widevine.');
-            playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
-            playbackConfig.licenseUrl = drmConfig.licenseUrl;
-             playbackConfig.shakaPlayerConfig = {
-              drm: { servers: { 'com.widevine.alpha': playbackConfig.licenseUrl } }
-            };
-          } else { sendCacLog('Receiver: Handler - Invalid customData.drm.'); }
-        } else { sendCacLog('Receiver: Handler - NO DRM config in customData.'); }
-    } else { sendCacLog('Receiver: Handler - No media or contentId.'); }
-    sendCacLog('Receiver: setMediaPlaybackInfoHandler END');
-    return playbackConfig;
-  });
+  // --- INTERCEPT ALL LOAD REQUESTS TO FORCE A CLEAR MP4 ---
+  playerManager.setMessageInterceptor(
+    cast.framework.messages.MessageType.LOAD,
+    (request) => {
+      sendCacLog('Receiver: LOAD Interceptor - Forcing Clear MP4');
+      request.media = {
+        contentId: 'https://storage.googleapis.com/testtopbox-public/video_content/bbb/BigBuckBunny.mp4', // Public Clear MP4
+        contentType: 'video/mp4',
+        streamType: 'BUFFERED',
+        title: 'Big Buck Bunny'
+      };
+      return request;
+    }
+  );
+  sendCacLog('Receiver: LOAD Interceptor Set.');
 
+  // NO setMediaPlaybackInfoHandler needed for clear content
+
+  // --- Basic Player Event Listeners ---
   playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
     sendCacLog('Receiver: Player Event - ERROR: ' + JSON.stringify(event));
   });
   playerManager.addEventListener(cast.framework.events.EventType.PLAYING, (event) => {
     sendCacLog('Receiver: Player Event - PLAYING');
   });
-   playerManager.addEventListener(cast.framework.events.EventType.LOAD_START, (event) => {
-    sendCacLog('Receiver: Player Event - LOAD_START for contentId: ' + playerManager.getMediaInformation().contentId);
+  playerManager.addEventListener(cast.framework.events.EventType.LOAD_START, (event) => {
+    sendCacLog('Receiver: Player Event - LOAD_START');
   });
+  sendCacLog('Receiver: Basic event listeners added.');
 
+  // --- Start Receiver ---
+  sendCacLog('Receiver: Calling context.start()...');
   context.start({ disableIdleTimeout: true });
   sendCacLog('Receiver: Context Started.');
 
 } catch (err) {
-  sendCacLog('Receiver: FATAL ERROR during setup: ' + err.message);
+  const errorMsg = 'Receiver: FATAL ERROR during setup: ' + err.message;
+  sendCacLog(errorMsg);
+  console.error(errorMsg, err);
 }
