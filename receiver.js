@@ -114,8 +114,7 @@ try {
   const { EventType } = cast.framework.events;
   playerManager.addEventListener(EventType.ERROR, (e) => sendCacLog('ERROR: ' + JSON.stringify(e)));
   playerManager.addEventListener(EventType.PLAYING, () => sendCacLog('PLAYING'));
-  playerManager.addEventListener(EventType.AD_BREAK_STARTED, () => sendCacLog('AD_BREAK_STARTED'));
-  playerManager.addEventListener(EventType.AD_BREAK_ENDED, () => sendCacLog('AD_BREAK_ENDED'));
+ 
   
   context.start({ disableIdleTimeout: true });
   sendCacLog('Context Started.');
