@@ -141,21 +141,35 @@ try {
   };
 
   // --- Interceptor to force DRM + VMAP + Stitching ---
+  // playerManager.setMessageInterceptor(
+  //   cast.framework.messages.MessageType.LOAD,
+  //   (request) => {
+  //     sendCacLog('LOAD Interceptor: Forcing DRM + VMAP');
+  //     request.media = {
+  //       contentId: MAIN_DRM_CONTENT_ID,
+  //       contentType: 'application/dash+xml',
+  //       streamType: 'BUFFERED',
+  //       title: 'DRM with VMAP Ad Test',
+  //       vmapAdsRequest: {
+  //         adTagUrl: TEST_VMAP_AD_TAG
+  //       },
+        
+  //       stitchedContentTimeline : true
+  //     };
+  //     sendCacLog('LOAD Interceptor - Media set: ' + JSON.stringify(request.media));
+  //     return request;
+  //   }
+  // );
   playerManager.setMessageInterceptor(
     cast.framework.messages.MessageType.LOAD,
     (request) => {
-      sendCacLog('LOAD Interceptor: Forcing DRM + VMAP');
+      sendCacLog('LOAD Interceptor - Forcing Google Ad MP4');
       request.media = {
-        contentId: MAIN_DRM_CONTENT_ID,
-        contentType: 'application/dash+xml',
+        contentId: 'https://storage.googleapis.com/interactive-media-ads/media/android.mp4',
+        contentType: 'video/mp4',
         streamType: 'BUFFERED',
-        title: 'DRM with VMAP Ad Test',
-        vmapAdsRequest: {
-          adTagUrl: TEST_VMAP_AD_TAG
-        },
-        stitchedContentTimeline : true
+        title: 'Google Ad MP4 Test'
       };
-      sendCacLog('LOAD Interceptor - Media set: ' + JSON.stringify(request.media));
       return request;
     }
   );
