@@ -189,19 +189,7 @@ try {
   });
   sendCacLog('MediaPlaybackInfoHandler Set (Conditional DRM).');
 
-  // --- IMA Ad Event Listeners ---
-  playerManager.addEventListener(cast.framework.events.EventType.AD_BREAK_FETCH_ERROR, (event) => {
-    sendCacLog('Player Event - AD_BREAK_FETCH_ERROR: ' + JSON.stringify(event));
-  });
-   playerManager.addEventListener(cast.framework.events.EventType.AD_BREAK_CLIP_LOAD_ERROR, (event) => {
-    sendCacLog('Player Event - AD_BREAK_CLIP_LOAD_ERROR: ' + JSON.stringify(event));
-  });
-   playerManager.addEventListener(cast.framework.events.EventType.AD_BREAK_STARTED, (event) => {
-    sendCacLog('Player Event - BREAK_STARTED (Ad is starting)');
-  });
-  playerManager.addEventListener(cast.framework.events.EventType.AD_BREAK_ENDED, (event) => {
-    sendCacLog('Player Event - BREAK_ENDED (Ad finished)');
-  });
+ 
 
   // --- Player Event Listeners ---
   playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
