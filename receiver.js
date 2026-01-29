@@ -153,6 +153,7 @@ try {
         vmapAdsRequest: {
           adTagUrl: TEST_VMAP_AD_TAG
         },
+        stitchedContentTimeline : true
       };
       sendCacLog('LOAD Interceptor - Media set: ' + JSON.stringify(request.media));
       return request;
