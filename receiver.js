@@ -169,7 +169,7 @@ try {
 
     // *** THE FIX for b/475285747 ***
     // Only apply DRM if the contentId matches the MAIN DRM content.
-    if (contentId === MAIN_DRM_CONTENT_ID) {
+    //if (contentId === MAIN_DRM_CONTENT_ID) {
       sendCacLog('Handler - APPLYING Widevine for MAIN Content.');
       playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
       playbackConfig.licenseUrl = WIDEVINE_LICENSE_SERVER;
@@ -178,11 +178,11 @@ try {
           servers: { 'com.widevine.alpha': WIDEVINE_LICENSE_SERVER }
         }
       };
-    } else {
-      sendCacLog('Handler - SKIPPING DRM for Ad Content: ' + contentId);
-      playbackConfig.protectionSystem = undefined;
-      playbackConfig.licenseUrl = undefined;
-    }
+    //} else {
+    //  sendCacLog('Handler - SKIPPING DRM for Ad Content: ' + contentId);
+    //  playbackConfig.protectionSystem = undefined;
+    //  playbackConfig.licenseUrl = undefined;
+    //}
     sendCacLog('setMediaPlaybackInfoHandler END');
     return playbackConfig;
   });
