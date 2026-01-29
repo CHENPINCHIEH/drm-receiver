@@ -1,235 +1,125 @@
-
-// ****** smple test for checking vedio play ****** //
-// const context = cast.framework.CastReceiverContext.getInstance();
-// const playerManager = context.getPlayerManager();
-// const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
-// window.queuedCacLogs = window.queuedCacLogs || [];
-
-// // --- CaC Tool Log 工具 (含隊列功能) ---
-// function sendCacLog(message) {
-//   const logPayload = {
-//     timestamp: new Date().toLocaleTimeString(),
-//     level: 'LOG',
-//     message: "[Receiver] " + message,
-//   };
-//   const senders = context.getSenders();
-//   if (senders && senders.length > 0) {
-//     while (window.queuedCacLogs.length > 0) {
-//       const queuedPayload = window.queuedCacLogs.shift();
-//       senders.forEach(sender => {
-//         try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { console.error('sendCacLog flush error:', e); }
-//       });
-//     }
-//     senders.forEach(sender => {
-//       try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { console.error('sendCacLog current error:', e); }
-//     });
-//   } else {
-//     window.queuedCacLogs.push(logPayload);
-//     console.log('Queued CAC Log:', message);
-//   }
-// }
-
-// sendCacLog('Script Loaded');
-
-// try {
-//   context.onSenderConnected = (event) => {
-//     sendCacLog('Event - Sender Connected: ' + (event ? event.senderId : 'N/A'));
-//   };
-//   sendCacLog('onSenderConnected handler set.');
-
-//   // --- 攔截所有 LOAD 請求 ---
-//   // 不論 CaC Tool 傳送什麼，都強制播放固定的 DRM 影片
-//   playerManager.setMessageInterceptor(
-//     cast.framework.messages.MessageType.LOAD,
-//     (request) => {
-//       sendCacLog('LOAD Interceptor START');
-//       request.media = {
-//         contentId: 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd',
-//         contentType: 'application/dash+xml',
-//         streamType: 'BUFFERED',
-//         title: 'Hardcoded DRM Test'
-//       };
-//       sendCacLog('LOAD Interceptor - Media forced to Angel One DRM');
-//       return request;
-//     }
-//   );
-//   sendCacLog('LOAD Message Interceptor Set.');
-
-//   // --- 固定的 DRM 資訊處理 ---
-//   playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
-//     sendCacLog('setMediaPlaybackInfoHandler START');
-//     const contentId = loadRequestData.media && loadRequestData.media.contentId;
-//     sendCacLog('Handler - Content ID: ' + contentId);
-
-//     sendCacLog('Handler - APPLYING Hardcoded Widevine DRM settings.');
-//     playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
-//     playbackConfig.licenseUrl = 'https://cwip-shaka-proxy.appspot.com/no_auth';
-//     playbackConfig.shakaPlayerConfig = {
-//       drm: {
-//         servers: { 'com.widevine.alpha': playbackConfig.licenseUrl }
-//       }
-//     };
-//     sendCacLog('setMediaPlaybackInfoHandler END');
-//     return playbackConfig;
-//   });
-//   sendCacLog('MediaPlaybackInfoHandler Set.');
-
-//   // --- 基本的播放器事件監聽 ---
-//   playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
-//     sendCacLog('Player Event - ERROR: ' + JSON.stringify(event));
-//   });
-//   playerManager.addEventListener(cast.framework.events.EventType.PLAYING, (event) => {
-//     sendCacLog('Player Event - PLAYING');
-//   });
-//   playerManager.addEventListener(cast.framework.events.EventType.LOAD_START, (event) => {
-//     sendCacLog('Player Event - LOAD_START');
-//   });
-//   sendCacLog('Basic event listeners added.');
-
-//   // --- 啟動 Receiver ---
-//   sendCacLog('Calling context.start()...');
-//   context.start({ disableIdleTimeout: true });
-//   sendCacLog('Context Started.');
-
-// } catch (err) {
-//   const errorMsg = 'FATAL ERROR during setup: ' + err.message;
-//   sendCacLog(errorMsg);
-//   console.error(errorMsg, err);
-// }
-
-
-// ****** fix version **** //
 const context = cast.framework.CastReceiverContext.getInstance();
 const playerManager = context.getPlayerManager();
 const CAC_LOG_NAMESPACE = 'urn:x-cast:com.google.cast.cac';
 window.queuedCacLogs = window.queuedCacLogs || [];
 
-// --- Configuration ---
+// --- Config ---
 const MAIN_DRM_CONTENT_ID = 'https://storage.googleapis.com/shaka-demo-assets/angel-one-widevine/dash.mpd';
 const WIDEVINE_LICENSE_SERVER = 'https://cwip-shaka-proxy.appspot.com/no_auth';
-const TEST_VMAP_AD_TAG = 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480&iu=/124319096/external/ad_rule_samples&ciu_szs=300x250&ad_rule=1&impl=s&gdfp_req=1&env=vp&output=vmap&unviewed_position_start=1&cust_params=deployment%3Ddevsite%26sample_ar%3Dpreonly&cmsid=496&vid=short_onecue&correlator=';
+// 使用您剛剛測試成功、確定可播放的 MP4 連結
+const WORKING_AD_MP4 = 'https://storage.googleapis.com/interactive-media-ads/media/android.mp4';
+
+// --- 建構自定義 VMAP XML (指向會動的 MP4) ---
+// 這樣可以繞過外部廣告伺服器的不穩定因素
+const CUSTOM_VMAP_XML = `
+<vmap:VMAP xmlns:vmap="http://www.iab.net/videosuite/vmap" version="1.0">
+  <vmap:AdBreak timeOffset="start" breakType="linear" breakId="preroll">
+    <vmap:AdSource id="preroll-ad-source" allowMultipleAds="false" followRedirects="true">
+      <vmap:VASTAdData>
+        <VAST version="3.0">
+          <Ad id="1">
+            <InLine>
+              <AdSystem>Test</AdSystem>
+              <AdTitle>Working MP4 Ad</AdTitle>
+              <Creatives>
+                <Creative>
+                  <Linear>
+                    <Duration>00:00:10</Duration>
+                    <MediaFiles>
+                      <MediaFile delivery="progressive" type="video/mp4" width="640" height="360">
+                        <![CDATA[${WORKING_AD_MP4}]]>
+                      </MediaFile>
+                    </MediaFiles>
+                  </Linear>
+                </Creative>
+              </Creatives>
+            </InLine>
+          </Ad>
+        </VAST>
+      </vmap:VASTAdData>
+    </vmap:AdSource>
+  </vmap:AdBreak>
+</vmap:VMAP>
+`.trim();
+
+// 將 XML 轉換為 Data URI，讓 Receiver 把它當作一個網址讀取
+const VMAP_DATA_URI = 'data:text/xml;charset=utf-8,' + encodeURIComponent(CUSTOM_VMAP_XML);
+
 
 // --- Logging for CaC Tool ---
 function sendCacLog(message) {
-  const logPayload = {
-    timestamp: new Date().toLocaleTimeString(),
-    level: 'LOG',
-    message: "[Receiver] " + message,
-  };
+  const logPayload = { timestamp: new Date().toLocaleTimeString(), level: 'LOG', message: "[Receiver] " + message };
   const senders = context.getSenders();
   if (senders && senders.length > 0) {
     while (window.queuedCacLogs.length > 0) {
       const queuedPayload = window.queuedCacLogs.shift();
-      senders.forEach(sender => {
-        try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) { console.error('sendCacLog flush error:', e); }
-      });
+      senders.forEach(sender => { try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, queuedPayload); } catch (e) {} });
     }
-    senders.forEach(sender => {
-      try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) { console.error('sendCacLog current error:', e); }
-    });
+    senders.forEach(sender => { try { context.sendCustomMessage(CAC_LOG_NAMESPACE, sender.id, logPayload); } catch (e) {} });
   } else {
     window.queuedCacLogs.push(logPayload);
-    console.log('Queued CAC Log:', message);
   }
 }
 
-sendCacLog('Script Loaded: DRM with VMAP Test');
+sendCacLog('Script Loaded: Custom VMAP + DRM');
 
 try {
-  context.onSenderConnected = (event) => {
-    sendCacLog('Event - Sender Connected');
-  };
+  context.onSenderConnected = (event) => { sendCacLog('Sender Connected'); };
 
-  // --- Interceptor to force DRM + VMAP + Stitching ---
-  // playerManager.setMessageInterceptor(
-  //   cast.framework.messages.MessageType.LOAD,
-  //   (request) => {
-  //     sendCacLog('LOAD Interceptor: Forcing DRM + VMAP');
-  //     request.media = {
-  //       contentId: MAIN_DRM_CONTENT_ID,
-  //       contentType: 'application/dash+xml',
-  //       streamType: 'BUFFERED',
-  //       title: 'DRM with VMAP Ad Test',
-  //       vmapAdsRequest: {
-  //         adTagUrl: TEST_VMAP_AD_TAG
-  //       },
-        
-  //       stitchedContentTimeline : true
-  //     };
-  //     sendCacLog('LOAD Interceptor - Media set: ' + JSON.stringify(request.media));
-  //     return request;
-  //   }
-  // );
+  // --- 1. Interceptor: 使用我們自製的 VMAP URI ---
   playerManager.setMessageInterceptor(
     cast.framework.messages.MessageType.LOAD,
     (request) => {
-      sendCacLog('LOAD Interceptor - Forcing Google Ad MP4');
+      sendCacLog('LOAD Interceptor: Injecting DRM + Custom VMAP');
       request.media = {
-        contentId: 'https://storage.googleapis.com/interactive-media-ads/media/android.mp4',
-        contentType: 'video/mp4',
+        contentId: MAIN_DRM_CONTENT_ID,
+        contentType: 'application/dash+xml',
         streamType: 'BUFFERED',
-        title: 'Google Ad MP4 Test'
+        title: 'DRM + Custom VMAP Test',
+        vmapAdsRequest: {
+          adTagUrl: VMAP_DATA_URI // <--- 關鍵：使用 Data URI
+        },
+        stitchedContentTimeline: true
       };
       return request;
     }
   );
-  sendCacLog('LOAD Message Interceptor Set.');
+  sendCacLog('Interceptor Set.');
 
-  // --- FIXED MediaPlaybackInfoHandler ---
+  // --- 2. Handler: 包含 Fix 的版本 ---
   playerManager.setMediaPlaybackInfoHandler((loadRequestData, playbackConfig) => {
-    sendCacLog('setMediaPlaybackInfoHandler START');
     const media = loadRequestData.media;
     const contentId = media && media.contentId ? media.contentId : 'UNKNOWN';
-    sendCacLog('Handler - Content ID: ' + contentId);
+    sendCacLog('Handler Content ID: ' + contentId);
 
-    // *** THE FIX for b/475285747 ***
-    // Only apply DRM if the contentId matches the MAIN DRM content.
-    //if (contentId === MAIN_DRM_CONTENT_ID) {
-      sendCacLog('Handler - APPLYING Widevine for MAIN Content.');
+    // *** THE FIX ***
+    if (contentId === MAIN_DRM_CONTENT_ID) {
+      sendCacLog('>> APPLYING Widevine for MAIN Content.');
       playbackConfig.protectionSystem = cast.framework.ContentProtection.WIDEVINE;
       playbackConfig.licenseUrl = WIDEVINE_LICENSE_SERVER;
       playbackConfig.shakaPlayerConfig = {
-        drm: {
-          servers: { 'com.widevine.alpha': WIDEVINE_LICENSE_SERVER }
-        }
+        drm: { servers: { 'com.widevine.alpha': WIDEVINE_LICENSE_SERVER } }
       };
-    //} else {
-    //  sendCacLog('Handler - SKIPPING DRM for Ad Content: ' + contentId);
-    //  playbackConfig.protectionSystem = undefined;
-    //  playbackConfig.licenseUrl = undefined;
-    //}
-    sendCacLog('setMediaPlaybackInfoHandler END');
+    } else {
+      // 這是廣告 (我們的 android.mp4)，不做 DRM 設定
+      sendCacLog('>> SKIPPING DRM for Ad: ' + contentId);
+      playbackConfig.protectionSystem = undefined;
+      playbackConfig.licenseUrl = undefined;
+    }
     return playbackConfig;
   });
-  sendCacLog('MediaPlaybackInfoHandler Set (Conditional DRM).');
+  sendCacLog('Handler Set.');
 
- 
-
-  // --- Player Event Listeners ---
-  playerManager.addEventListener(cast.framework.events.EventType.ERROR, (event) => {
-    sendCacLog('Player Event - ERROR: ' + JSON.stringify(event));
-  });
-  playerManager.addEventListener(cast.framework.events.EventType.PLAYING, (event) => {
-    sendCacLog('Player Event - PLAYING');
-  });
-  playerManager.addEventListener(cast.framework.events.EventType.LOAD_START, (event) => {
-    sendCacLog('Player Event - LOAD_START');
-  });
-  playerManager.addEventListener(cast.framework.events.EventType.BREAK_STARTED, (event) => {
-    sendCacLog('Player Event - BREAK_STARTED (Ad is starting)');
-  });
-  playerManager.addEventListener(cast.framework.events.EventType.BREAK_ENDED, (event) => {
-    sendCacLog('Player Event - BREAK_ENDED (Ad finished)');
-  });
-  sendCacLog('Basic event listeners added.');
-
-  // --- Start Receiver ---
-  sendCacLog('Calling context.start()...');
+  // --- Event Listeners ---
+  const { EventType } = cast.framework.events;
+  playerManager.addEventListener(EventType.ERROR, (e) => sendCacLog('ERROR: ' + JSON.stringify(e)));
+  playerManager.addEventListener(EventType.PLAYING, () => sendCacLog('PLAYING'));
+  playerManager.addEventListener(EventType.AD_BREAK_STARTED, () => sendCacLog('AD_BREAK_STARTED'));
+  playerManager.addEventListener(EventType.AD_BREAK_ENDED, () => sendCacLog('AD_BREAK_ENDED'));
+  
   context.start({ disableIdleTimeout: true });
   sendCacLog('Context Started.');
 
 } catch (err) {
-  const errorMsg = 'FATAL ERROR during setup: ' + err.message;
-  sendCacLog(errorMsg);
-  console.error(errorMsg, err);
+  sendCacLog('FATAL: ' + err.message);
 }
